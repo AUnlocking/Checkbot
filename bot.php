@@ -1,213 +1,179 @@
 <?php
+// Configuración inicial
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__.'/error.log');
 
-
-
-//all rights reserved AldazUnlock
-//bot telegram
-// note => to make the bot pull, you must put this link => https://api.telegram.org/bot$youtoken/setWebhook?url=https://you_domain.com/check/bot/ialdaz_bot_check.php
+// Configuración del bot
 $token = 'youtoken_bot';
 $website = 'https://api.telegram.org/bot'.$token;
 
+// Registro de la solicitud entrante
+file_put_contents('request.log', date('Y-m-d H:i:s')." - ".file_get_contents('php://input')."\n", FILE_APPEND);
+
+// Procesamiento de la entrada
 $input = file_get_contents('php://input');
-$update = json_decode($input, TRUE);
-
-$chatId = $update['message']['chat']['id'];
-
-$message = $update['message']['text'];
-
-  
-$mystring = $message;
-$findme   = '/check ';
-$pos = strpos($mystring, $findme);
-
-if ($pos === false) {
-}else{
-    $text1 = "<code>processing...</code>";
-    sendMessage1($text1, $chatId);
-    $text = check($message);
-    sendMessage($text, $chatId);
+if (empty($input)) {
+    error_log("Entrada vacía recibida");
+    http_response_code(400);
+    exit;
 }
 
-
-$mystring1 = $message;
-$findme1   = '/iccid';
-$pos1 = strpos($mystring1, $findme1);
-
-if ($pos1 === false) {
-}else{
-    $text1 = "<code>processing...</code>";
-    sendMessage1($text1, $chatId);
-    $text = iccid($message1);
-    sendMessage($text, $chatId);
+$update = json_decode($input, true);
+if (json_last_error() !== JSON_ERROR_NONE || !isset($update['message'])) {
+    error_log("JSON inválido o estructura incorrecta: ".$input);
+    http_response_code(400);
+    exit;
 }
 
+// Extracción segura de datos
+$chatId = $update['message']['chat']['id'] ?? null;
+$message = trim($update['message']['text'] ?? '');
 
-$mystring2 = $message;
-$findme2   = '/check_device ';
-$pos2 = strpos($mystring2, $findme2);
-
-if ($pos2 === false) {
-}else{
-    $text1 = "<code>processing...</code>";
-    sendMessage1($text1, $chatId);
-    $text = checkmac($message);
-    sendMessage($text, $chatId);
+if (empty($chatId) || empty($message)) {
+    error_log("Chat ID o mensaje vacío");
+    http_response_code(400);
+    exit;
 }
 
+// Procesamiento de comandos
+$responseText = processCommand($message, $chatId);
+if ($responseText) {
+    sendMessage($responseText, $chatId);
+}
 
-    function check($message1)
-    {
-        $message1 = str_replace("/check ", "", $message1);
-        $curl = curl_init();
-    curl_setopt_array($curl, array(
-    CURLOPT_URL => "https://iservices-dev.us/check/Nhteam.php?imei=$message1",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_ENCODING => "",
-    CURLOPT_MAXREDIRS => 10,
-    CURLOPT_TIMEOUT => 0,
-    CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_SSL_VERIFYPEER => false,
-    CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-    CURLOPT_CUSTOMREQUEST => "GET",
-));
-$curlResponse = curl_exec($curl);
-curl_close($curl);
-$response = json_decode($curlResponse);
-if($response->ERROR == 'Invalid IMEI/Serial Number'){
-    return "<code>IMEI / SERIAL INVALID ❌</code>";
-}
-elseif($response->ERROR == 'Invalid IMEI/Serial Number'){
-    return "<code>IMEI / SERIAL INVALID! ❌</code>";
-}
-elseif(!empty($response->type))
+/**
+ * Procesa los comandos del bot
+ */
+function processCommand(string $message, int $chatId): ?string
 {
-    if($response->FindMyiDevice == "ON")
-    {
-        return "✅  𝐢𝐀𝐥𝐝𝐚𝐳 𝐂𝐡𝐞𝐜𝐤 𝐁𝐨𝐭 ✅   \n========================= \n\n<code>SERIAL => </code><u>".$response->Serial.
-
-            "</u><code>\nMODEL => </code><u>".$response->Modelo.
-            "</u><code>\nActivation => </code><u>".$response->Activation.
-            "</u><code>\niCloud Lock => </code><u>".$response->FindMyiDevice."</u> ❌\n<code>   \n=========================== \n\n𝑻𝒉𝒂𝒏𝒌𝒔 𝒀𝒐𝒖. ✅   \niALDAZ </code>";
+    if (strpos($message, '/check ') === 0) {
+        sendMessage("<code>processing...</code>", $chatId);
+        return check(substr($message, 7));
     }
-    else{
-        return "✅  𝐢𝐀𝐥𝐝𝐚𝐳 𝐂𝐡𝐞𝐜𝐤 𝐁𝐨𝐭 ✅   \n========================= \n\n<code>SERIAL => </code><u>".$response->Serial.
 
-            "</u><code>\nMODEL => </code><u>".$response->Modelo.
-            "</u><code>\nActivation => </code><u>".$response->Activation.
-            "</u><code>\niCloud Lock => </code><u>".$response->FindMyiDevice."</u> 🍎✅ \n<code>   \n=========================== \n\n𝑻𝒉𝒂𝒏𝒌𝒔 𝒀𝒐𝒖. ✅ \niALDAZ </code>";
+    if (strpos($message, '/iccid ') === 0) {
+        sendMessage("<code>processing...</code>", $chatId);
+        return iccid(substr($message, 7));
     }
-}
-else
-        {
-            if($response->FindMyiDevice == "ON")
-            {
-        return "✅  𝐢𝐀𝐥𝐝𝐚𝐳 𝐂𝐡𝐞𝐜𝐤 𝐁𝐨𝐭 ✅   \n========================= \n\n<code>SERIAL => </code><u>".$response->Serial.
-            "</u><code>\nMODEL => </code><u>".$response->Modelo.
-            "</u><code>\nActivation => </code><u>".$response->Activation.
-            "</u><code>\niCloud Lock => </code><u>".$response->FindMyiDevice."</u> ❌\n<code>   \n=========================== \n\n𝑻𝒉𝒂𝒏𝒌𝒔 𝒀𝒐𝒖. ✅   \niALDAZ </code>";
-            }
-            else{
-        return "✅  𝐢𝐀𝐥𝐝𝐚𝐳 𝐂𝐡𝐞𝐜𝐤 𝐁𝐨𝐭 ✅   \n========================= \n\n<code>SERIAL => </code><u>".$response->Serial.
-            "</u><code>\nMODEL => </code><u>".$response->Modelo.
-            "</u><code>\nActivation => </code><u>".$response->Activation.
-            "</u><code>\niCloud Lock => </code><u>".$response->FindMyiDevice."</u> 🍎✅ \n<code>   \n=========================== \n\n𝑻𝒉𝒂𝒏𝒌𝒔 𝒀𝒐𝒖. ✅ \niALDAZ </code>";
-            }
-        }
+
+    if (strpos($message, '/check_device ') === 0) {
+        sendMessage("<code>processing...</code>", $chatId);
+        return checkmac(substr($message, 14));
+    }
+
+    return null;
 }
 
-
-
-function checkmac($message)
+/**
+ * Función para verificar IMEI
+ */
+function check(string $imei): string 
 {
-        $serial = str_replace("/check_device ", "", $message);
-        $curl = curl_init();
-        curl_setopt_array($curl, array(
-        CURLOPT_URL => "https://iservices-dev.us/check/",
+    $response = makeApiRequest("https://iservices-dev.us/check/Nhteam.php?imei=".urlencode($imei));
+    
+    if (isset($response->ERROR) && $response->ERROR === 'Invalid IMEI/Serial Number') {
+        return "<code>IMEI / SERIAL INVALID ❌</code>";
+    }
+
+    if (empty($response)) {
+        return "<code>Error en la API de verificación</code>";
+    }
+
+    $lockStatus = ($response->FindMyiDevice == "ON") ? "❌" : "🍎✅";
+    
+    return "✅ 𝐢𝐀𝐥𝐝𝐚𝐳 𝐂𝐡𝐞𝐜𝐤 𝐁𝐨𝐭 ✅\n=========================\n"
+         ."<code>SERIAL => </code><u>{$response->Serial}</u>\n"
+         ."<code>MODEL => </code><u>{$response->Modelo}</u>\n"
+         ."<code>Activation => </code><u>{$response->Activation}</u>\n"
+         ."<code>iCloud Lock => </code><u>{$response->FindMyiDevice}</u> $lockStatus\n"
+         ."<code>===========================\n\n𝑻𝒉𝒂𝒏𝒌𝒔 𝒀𝒐𝒖. ✅\niALDAZ </code>";
+}
+
+/**
+ * Función para verificar dispositivo por MAC
+ */
+function checkmac(string $serial): string 
+{
+    $response = makeApiRequest("https://iservices-dev.us/check/");
+    return $response ?: "<code>Error al verificar dispositivo</code>";
+}
+
+/**
+ * Función para verificar ICCID
+ */
+function iccid(string $iccid): string 
+{
+    $response = makeApiRequest("https://iservices-dev.us/check/iccid.php?iccid=".urlencode($iccid));
+    
+    if (isset($response->ERROR) && $response->ERROR === 'Invalid IMEI/Serial Number') {
+        return "<code>NO ICCID</code>";
+    }
+
+    if (empty($response)) {
+        return "<code>Error en la API de ICCID</code>";
+    }
+
+    return "✅ iCCID ACTIVE ✅\n=========================\n"
+         ."<code>Active date => </code><u>{$response->fecha}</u>\n"
+         ."<code>BUILD => </code><u>{$response->build}</u>\n"
+         ."<code>iccid => </code><u>{$response->iccid}</u> 🍎✅\n"
+         ."<code>===========================\n\n𝑻𝒉𝒂𝒏𝒌𝒔 𝒀𝒐𝒖. ✅\niALDAZ </code>";
+}
+
+/**
+ * Función genérica para solicitudes API
+ */
+function makeApiRequest(string $url) 
+{
+    $curl = curl_init();
+    curl_setopt_array($curl, [
+        CURLOPT_URL => $url,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_ENCODING => "",
         CURLOPT_MAXREDIRS => 10,
-        CURLOPT_TIMEOUT => 0,
+        CURLOPT_TIMEOUT => 15,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
         CURLOPT_CUSTOMREQUEST => "GET",
-    ));
-    $curlResponse = curl_exec($curl);
+    ]);
+    
+    $response = curl_exec($curl);
     curl_close($curl);
-    return $curlResponse;
+    
+    return json_decode($response);
 }
 
-   function iccid($message1)
-    {
-        $message1 = str_replace("/iccid ", "", $message1);
-        $curl = curl_init();
-    curl_setopt_array($curl, array(
-    CURLOPT_URL => "https://iservices-dev.us/check/iccid.php",
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_ENCODING => "",
-    CURLOPT_MAXREDIRS => 10,
-    CURLOPT_TIMEOUT => 0,
-    CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_SSL_VERIFYPEER => false,
-    CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-    CURLOPT_CUSTOMREQUEST => "GET",
-));
-$curlResponse = curl_exec($curl);
-curl_close($curl);
-$response = json_decode($curlResponse);
-if($response->ERROR == 'Invalid IMEI/Serial Number'){
-    return "<code>NO ICCID /code>";
-}
-elseif($response->ERROR == 'Invalid IMEI/Serial Number'){
-   return "<code>NO ICCID /code>";
-}
-elseif(!empty($response->type))
+/**
+ * Función para enviar mensajes
+ */
+function sendMessage(string $text, int $chatId): bool 
 {
-    if($response)
-    {
-        return "✅  iCCID ACTIVE ✅   \n========================= \n\n<code>Active date  => </code><u>".$response->fecha.
-        "</u><code>\nBUILD => </code><u>".$response->build.
-            "</u><code>\niccid => </code><u>".$response->iccid."</u> 🍎✅ \n<code>   \n=========================== \n\n𝑻𝒉𝒂𝒏𝒌𝒔 𝒀𝒐𝒖. ✅ \niALDAZ </code>";
+    global $website;
+    
+    $data = [
+        'chat_id' => $chatId,
+        'text' => $text,
+        'parse_mode' => 'HTML'
+    ];
+    
+    $options = [
+        'http' => [
+            'method' => 'POST',
+            'header' => "Content-Type:application/x-www-form-urlencoded\r\n",
+            'content' => http_build_query($data)
+        ]
+    ];
+    
+    $context = stream_context_create($options);
+    $result = file_get_contents($website.'/sendMessage', false, $context);
+    
+    if ($result === false) {
+        error_log("Error al enviar mensaje a $chatId: ".print_r($data, true));
+        return false;
     }
-    else{
-        return "✅  iCCID ACTIVE ✅   \n========================= \n\n<code>Active date  => </code><u>".$response->fecha.
-        "</u><code>\nBUILD => </code><u>".$response->build.
-            "</u><code>\niccid Active => </code><u>".$response->iccid."</u> 🍎✅ \n<code>   \n=========================== \n\n𝑻𝒉𝒂𝒏𝒌𝒔 𝒀𝒐𝒖. ✅ \niALDAZ </code>";
-    }
+    
+    return true;
 }
-else
-        {
-            if($response)
-            {
-        return "✅  iCCID ACTIVE ✅   \n========================= \n\n<code>Active date  => </code><u>".$response->fecha.
-        "</u><code>\nBUILD => </code><u>".$response->build.
-            "</u><code>\niccid Active => </code><u>".$response->iccid."</u> 🍎✅ \n<code>   \n=========================== \n\n𝑻𝒉𝒂𝒏𝒌𝒔 𝒀𝒐𝒖. ✅ \niALDAZ </code>";
-            }
-            else{
-        return "✅  iCCID ACTIVE ✅   \n========================= \n\n<code>Active date  => </code><u>".$response->fecha.
-        "</u><code>\nBUILD => </code><u>".$response->build.
-            "</u><code>\niccid Active => </code><u>".$response->iccid."</u> 🍎✅ \n<code>   \n=========================== \n\n𝑻𝒉𝒂𝒏𝒌𝒔 𝒀𝒐𝒖. ✅ \niALDAZ </code>";
-            }
-        }
-}
-
-    function sendMessage($text, $chatId)
-    {
-        $url = $GLOBALS['website'].'/sendMessage';
-        $data = array('chat_id' => $chatId, 'text' => $text, 'parse_mode' => 'HTML');
-        $options = array('http' => array('method' => 'POST', 'header' => "Content-Type:application/x-www-form-urlencoded\r\n", 'content' => http_build_query($data),),);
-        $context = stream_context_create($options);
-        $result = file_get_contents($url, false, $context);
-        return $result;
-    }
-
-    function sendMessage1($text, $chatId)
-    {
-        $url = $GLOBALS['website'].'/sendMessage';
-        $data = array('chat_id' => $chatId, 'text' => $text, 'parse_mode' => 'HTML');
-        $options = array('http' => array('method' => 'POST', 'header' => "Content-Type:application/x-www-form-urlencoded\r\n", 'content' => http_build_query($data),),);
-        $context = stream_context_create($options);
-        $result = file_get_contents($url, false, $context);
-        return $result;
-    }
-?>
