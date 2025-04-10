@@ -1,179 +1,69 @@
 <?php
-// Configuración inicial
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-ini_set('log_errors', 1);
-ini_set('error_log', __DIR__.'/error.log');
+// Token de tu bot (obtenido de @BotFather)
+define('BOT_TOKEN', 'TU_TOKEN_AQUI');
 
-// Configuración del bot
-$token = 'youtoken_bot';
-$website = 'https://api.telegram.org/bot'.$token;
+// URL de la API de Telegram
+define('API_URL', 'https://api.telegram.org/bot' . BOT_TOKEN . '/');
 
-// Registro de la solicitud entrante
-file_put_contents('request.log', date('Y-m-d H:i:s')." - ".file_get_contents('php://input')."\n", FILE_APPEND);
-
-// Procesamiento de la entrada
-$input = file_get_contents('php://input');
-if (empty($input)) {
-    error_log("Entrada vacía recibida");
-    http_response_code(400);
-    exit;
+// Función para enviar mensajes
+function sendMessage($chat_id, $text) {
+    $url = API_URL . "sendMessage?chat_id=" . $chat_id . "&text=" . urlencode($text);
+    file_get_contents($url);
 }
 
-$update = json_decode($input, true);
-if (json_last_error() !== JSON_ERROR_NONE || !isset($update['message'])) {
-    error_log("JSON inválido o estructura incorrecta: ".$input);
-    http_response_code(400);
-    exit;
-}
-
-// Extracción segura de datos
-$chatId = $update['message']['chat']['id'] ?? null;
-$message = trim($update['message']['text'] ?? '');
-
-if (empty($chatId) || empty($message)) {
-    error_log("Chat ID o mensaje vacío");
-    http_response_code(400);
-    exit;
-}
-
-// Procesamiento de comandos
-$responseText = processCommand($message, $chatId);
-if ($responseText) {
-    sendMessage($responseText, $chatId);
-}
-
-/**
- * Procesa los comandos del bot
- */
-function processCommand(string $message, int $chatId): ?string
-{
-    if (strpos($message, '/check ') === 0) {
-        sendMessage("<code>processing...</code>", $chatId);
-        return check(substr($message, 7));
+// Función para verificar IMEI con Apple
+function checkImei($imei) {
+    $url = 'https://selfsolve.apple.com/warrantyChecker.do?sn=' . urlencode($imei);
+    
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode == 200 && !empty($response)) {
+        $response = str_replace(['null(', ')'], '', $response);
+        return json_decode($response, true);
     }
-
-    if (strpos($message, '/iccid ') === 0) {
-        sendMessage("<code>processing...</code>", $chatId);
-        return iccid(substr($message, 7));
-    }
-
-    if (strpos($message, '/check_device ') === 0) {
-        sendMessage("<code>processing...</code>", $chatId);
-        return checkmac(substr($message, 14));
-    }
-
-    return null;
+    return false;
 }
 
-/**
- * Función para verificar IMEI
- */
-function check(string $imei): string 
-{
-    $response = makeApiRequest("https://iservices-dev.us/check/Nhteam.php?imei=".urlencode($imei));
+// Procesar los mensajes recibidos
+$update = json_decode(file_get_contents('php://input'), true);
+
+if (isset($update['message']['text'])) {
+    $chat_id = $update['message']['chat']['id'];
+    $text = $update['message']['text'];
     
-    if (isset($response->ERROR) && $response->ERROR === 'Invalid IMEI/Serial Number') {
-        return "<code>IMEI / SERIAL INVALID ❌</code>";
+    // Comando /start
+    if ($text == '/start') {
+        sendMessage($chat_id, "📱 *Bot de Verificación de IMEI iPhone*\n\nEnvíame un IMEI y te daré información de Apple.");
+    } 
+    // Verificar IMEI (si es un número)
+    elseif (preg_match('/^\d{15}$/', $text)) {
+        $data = checkImei($text);
+        
+        if (isset($data['ERROR_CODE'])) {
+            sendMessage($chat_id, "❌ *Error*: IMEI inválido o no encontrado.");
+        } elseif ($data) {
+            $message = "✅ *Información del IMEI*: $text\n";
+            $message .= "📱 *Modelo*: " . ($data['PART_DESCR'] ?? 'N/A') . "\n";
+            $message .= "🌍 *País*: " . ($data['PURCH_COUNTRY'] ?? 'N/A') . "\n";
+            $message .= "📅 *Garantía*: " . ($data['HW_COVERAGE_DESC'] ?? 'N/A') . "\n";
+            $message .= "🔚 *Fin de garantía*: " . ($data['COV_END_DATE'] ?? 'N/A') . "\n";
+            $message .= "📶 *Operador*: " . ($data['CARRIER'] ?? 'No bloqueado') . "\n";
+            
+            sendMessage($chat_id, $message);
+        } else {
+            sendMessage($chat_id, "⚠️ Error al conectar con Apple. Intenta más tarde.");
+        }
+    } else {
+        sendMessage($chat_id, "🔢 Por favor, envía un IMEI válido (15 dígitos).");
     }
-
-    if (empty($response)) {
-        return "<code>Error en la API de verificación</code>";
-    }
-
-    $lockStatus = ($response->FindMyiDevice == "ON") ? "❌" : "🍎✅";
-    
-    return "✅ 𝐢𝐀𝐥𝐝𝐚𝐳 𝐂𝐡𝐞𝐜𝐤 𝐁𝐨𝐭 ✅\n=========================\n"
-         ."<code>SERIAL => </code><u>{$response->Serial}</u>\n"
-         ."<code>MODEL => </code><u>{$response->Modelo}</u>\n"
-         ."<code>Activation => </code><u>{$response->Activation}</u>\n"
-         ."<code>iCloud Lock => </code><u>{$response->FindMyiDevice}</u> $lockStatus\n"
-         ."<code>===========================\n\n𝑻𝒉𝒂𝒏𝒌𝒔 𝒀𝒐𝒖. ✅\niALDAZ </code>";
 }
-
-/**
- * Función para verificar dispositivo por MAC
- */
-function checkmac(string $serial): string 
-{
-    $response = makeApiRequest("https://iservices-dev.us/check/");
-    return $response ?: "<code>Error al verificar dispositivo</code>";
-}
-
-/**
- * Función para verificar ICCID
- */
-function iccid(string $iccid): string 
-{
-    $response = makeApiRequest("https://iservices-dev.us/check/iccid.php?iccid=".urlencode($iccid));
-    
-    if (isset($response->ERROR) && $response->ERROR === 'Invalid IMEI/Serial Number') {
-        return "<code>NO ICCID</code>";
-    }
-
-    if (empty($response)) {
-        return "<code>Error en la API de ICCID</code>";
-    }
-
-    return "✅ iCCID ACTIVE ✅\n=========================\n"
-         ."<code>Active date => </code><u>{$response->fecha}</u>\n"
-         ."<code>BUILD => </code><u>{$response->build}</u>\n"
-         ."<code>iccid => </code><u>{$response->iccid}</u> 🍎✅\n"
-         ."<code>===========================\n\n𝑻𝒉𝒂𝒏𝒌𝒔 𝒀𝒐𝒖. ✅\niALDAZ </code>";
-}
-
-/**
- * Función genérica para solicitudes API
- */
-function makeApiRequest(string $url) 
-{
-    $curl = curl_init();
-    curl_setopt_array($curl, [
-        CURLOPT_URL => $url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_ENCODING => "",
-        CURLOPT_MAXREDIRS => 10,
-        CURLOPT_TIMEOUT => 15,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-        CURLOPT_CUSTOMREQUEST => "GET",
-    ]);
-    
-    $response = curl_exec($curl);
-    curl_close($curl);
-    
-    return json_decode($response);
-}
-
-/**
- * Función para enviar mensajes
- */
-function sendMessage(string $text, int $chatId): bool 
-{
-    global $website;
-    
-    $data = [
-        'chat_id' => $chatId,
-        'text' => $text,
-        'parse_mode' => 'HTML'
-    ];
-    
-    $options = [
-        'http' => [
-            'method' => 'POST',
-            'header' => "Content-Type:application/x-www-form-urlencoded\r\n",
-            'content' => http_build_query($data)
-        ]
-    ];
-    
-    $context = stream_context_create($options);
-    $result = file_get_contents($website.'/sendMessage', false, $context);
-    
-    if ($result === false) {
-        error_log("Error al enviar mensaje a $chatId: ".print_r($data, true));
-        return false;
-    }
-    
-    return true;
-}
+?>
